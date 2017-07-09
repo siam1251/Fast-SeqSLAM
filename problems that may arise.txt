@@ -1,0 +1,11 @@
+doPreprocessing:
+	Sometimes, flan library crash because of the CellSize parameter of extractHOGFeatures(im,'CellSize',[64 32]) being too small because FLANN ANN needs the same dimension for the two preporcessed datasets. If image dimensions are different then there might arise some problems.
+
+Image Resizing for large image:
+	If the sizes of the images are 640*440 or greater than this then to get good result you need to resize the image before extracting the HOG features. I usually resized to 32*32 and has a better performance over the original size.
+
+Error: Improper assignment with rectangular empty matrix.
+	   Error in doPreprocessing>preprocessing (line 94)
+       dhog(j,:)= d(:);
+       It means that the params.dataset(1).cellSize should be smaller. 
+       cellSize must be smaller than the image size

@@ -50,13 +50,9 @@ function [matches, seqValues] = findMatchingMatrix(results, params)
     
     move = move_min:move_max;
     v = move / params.matching.ds;
-    %adding velocity 1 will go in the next location if
-    % since all the trajectories will have same difference score
-    % and it will return the first one
-    v = [1, v];
     %v(1) = 1
     ds = params.matching.ds;
-    idy_add = repmat([-ds:0], size(v,2),1);
+    idy_add = repmat([-ds/2:ds/2], size(v,2),1);
    
    % idy_add is y axis indices
    %   -1 0 1
@@ -64,7 +60,7 @@ function [matches, seqValues] = findMatchingMatrix(results, params)
    %   -1 -1 0
    %
    length(idy_add)
-    idy_add = round(idy_add .* repmat(v', 1, size(idy_add,2)));
+    idy_add = floor(idy_add .* repmat(v', 1, size(idy_add,2)));
     
      
     
@@ -82,19 +78,18 @@ function [matches, seqValues] = findMatchingMatrix(results, params)
     %row padding
     DD=[DD];
     num_cols = size(DD,2);
-    row_padding = ones(ds,num_cols)*max_val;
+    row_padding = ones(ds/2,num_cols)*max_val;
     
-    DD=[row_padding;DD];
+    DD=[row_padding;DD;row_padding];
     %col padding
     %col padding is 1 more than ds/2 because if we have higher velcity than
     %1 then it will create problem
     num_rows = size(DD,1);
-    col_padding = ones(num_rows,ds);
-    DD = [col_padding, DD];
+    col_padding = ones(num_rows,1+ds/2);
+    DD = [col_padding, DD, col_padding];
 
 
     maxRow = size(DD,1);
-    maxCol = size(DD,2);
     
     
     matchingMatrix = ones(size(DD))*seqMaxValue;
@@ -102,77 +97,67 @@ function [matches, seqValues] = findMatchingMatrix(results, params)
    
     % [sortedValues,sortIndex] = sort(results.DD,'ascend'); 
     % max_index = 5;
-    next_states = [];
-   
-    if params.N < params.K
-        K = params.N
-    else
-    	K =params.K
-    end
-    for Col = 2*ds : size(DD,2)
+
+    for Col = 2+ds/2 : size(DD,2)-1-ds/2
         % this is where our trajectory starts
         % n_start = Col - ds/2;
         % %x  is in x axis indices, 
         % x= repmat([n_start : n_start+ds], length(v), 1);  
-        %indices = find(DD(:,Col) < max_val);
+        indices = find(DD(:,Col) < max_val);
         
         %indices of n lowest values in a column
         [sortedValues,sortIndex] = sort(DD(:,Col),'ascend');  %# Sort the values in increasing order
-        indices = sortIndex(1:K);  %# Get a linear index into A of the smallest values
-        
-        indices = union(indices,next_states);
-        if size(indices,1) > 1
-        	indices = indices';
-        end
+        indices = intersect(indices,sortIndex(1:10));  %# Get a linear index into A of the smallest values
         %indices = sortIndex(1:10);
         %lf = find(DD(:,Col) > params.initial_distance)
-      
-        next_states = [];
-        for Row=indices
-           
         
-            if Col > maxCol || Row > maxRow
-                break;
-            end
+        for Row=indices'
+            C = Col;
+            R = Row;
             % score is zero for entering in the while loop
-            if matchingMatrix(Row,Col) < seqMaxValue
+            if matchingMatrix(R,C) < seqMaxValue
                 continue;
             end
             score = 0;
-        
-            n_start = Col;
-            %x  is in x axis indices, or column indices
-            x= repmat([n_start-ds : n_start], length(v), 1);  
-            xx = (x-1) * y_max;
+            while score < seqMaxValue % at least 1-.x
+                %score = findSingleMatch(DD,x,idy_add,y_max, Col,Row, params);
+                % if matchingMatrix(R,C) < seqMaxValue
+                %     break;
+                % end
+                if C > size(DD,2)-ds/2|| R > size(DD,1)-ds/2||C < ds/2
+                    break;
+                end
+                n_start = C;
+                %x  is in x axis indices, or column indices
+                x= repmat([n_start-ds/2 : n_start+ds/2], length(v), 1);  
+                xx = (x-1) * y_max;
 
-            %row indices
-            y = min(idy_add+Row, y_max);   
-            %adding row indices and column indices
-            idy = xx + y;
-            
-            [score, velocity_index] = min(sum(DD(idy),2));
-            %idy = indices are always accessed row wise
-            %Since we made the indices using colunm by column or assume
-            %indices will be column by column,
-            %in sum function, for option 2, column wise indices summation
-            %otherwise row wise indices summation
-            %matchingMatrix(R,C) = score;
-            
-            
-            matchingMatrix(Row,Col) = score;
-                %DD(R,C) = score/(ds+1);
-                %[R,C,score,velocity_index]
-            
-            %current_velocity = v(velocity_index);
-            %matchingMatrix
-            
-            R = Row + idy_add(velocity_index,ds+1)-idy_add(velocity_index,ds);
-            if score < seqMaxValue
-                next_states = [next_states; R];
+                %row indices
+                y = min(idy_add+R, y_max);   
+                %adding row indices and column indices
+                idy = xx + y;
+                
+                [score, velocity_index] = min(sum(DD(idy),2));
+                %idy = indices are always accessed row wise
+                %Since we made the indices using colunm by column or assume
+                %indices will be column by column,
+                %in sum function, for option 2, column wise indices summation
+                %otherwise row wise indices summation
+                %matchingMatrix(R,C) = score;
+                
+                if matchingMatrix(R,C) > score
+                    matchingMatrix(R,C) = score;
+                    %DD(R,C) = score/(ds+1);
+                    %[R,C,score,velocity_index]
+                else
+                    break;
+                end
+                %current_velocity = v(velocity_index);
+                %matchingMatrix
+                C = C+1;
+                R = R + idy_add(velocity_index,2+ds/2)-idy_add(velocity_index,1+ds/2);
+                
             end
-           
-            
-        
             
         end
             %   waitbar(N / size(results.DD,2), h_waitbar);
@@ -189,7 +174,7 @@ function [matches, seqValues] = findMatchingMatrix(results, params)
 
     %give up the padding of machingMatrix
     %since col padding was 1 more than ds/2 
-    matchingMatrix = matchingMatrix(ds+1:end,ds+1:end);
+    matchingMatrix = matchingMatrix(1+ds/2:end-ds/2,2+ds/2:end-1-ds/2);
     matches = NaN(size(matchingMatrix,2),2);
     for Col = 1: size(matchingMatrix,2)
 
